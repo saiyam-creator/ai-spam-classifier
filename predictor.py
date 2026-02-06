@@ -20,25 +20,51 @@ class SpamPredictor:
         self.model = None
         self.vectorizer = None
         self.stemmer = PorterStemmer()
-        self.stop_words = set(stopwords.words('english'))
         
-        # Download NLTK data if needed
+        # Download NLTK data FIRST - FIXED VERSION
         self._ensure_nltk_data()
+        
+        # Then load stopwords
+        self.stop_words = set(stopwords.words('english'))
         
         # Load model
         self.load_model()
     
     def _ensure_nltk_data(self):
-        """Ensure NLTK data is downloaded"""
-        try:
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            nltk.download('stopwords', quiet=True)
+        """Ensure NLTK data is downloaded - PRODUCTION FIX"""
+        import ssl
         
+        # Fix SSL certificate issues on cloud
         try:
-            nltk.data.find('tokenizers/punkt')
-        except LookupError:
-            nltk.download('punkt', quiet=True)
+            _create_unverified_https_context = ssl._create_unverified_context
+        except AttributeError:
+            pass
+        else:
+            ssl._create_default_https_context = _create_unverified_https_context
+        
+        # Download required NLTK data with error handling
+        required_data = {
+            'stopwords': 'corpora/stopwords',
+            'punkt': 'tokenizers/punkt'
+        }
+        
+        for name, path in required_data.items():
+            try:
+                nltk.data.find(path)
+                print(f"✓ {name} already downloaded")
+            except LookupError:
+                print(f"Downloading {name}...")
+                try:
+                    nltk.download(name, quiet=False)
+                    print(f"✓ {name} downloaded successfully")
+                except Exception as e:
+                    print(f"✗ Error downloading {name}: {e}")
+                    # Try alternative download path
+                    try:
+                        nltk.download(name, download_dir=os.path.expanduser('~/nltk_data'))
+                        print(f"✓ {name} downloaded to ~/nltk_data")
+                    except Exception as e2:
+                        print(f"✗ Failed to download {name}: {e2}")
     
     def load_model(self):
         """Load trained model and vectorizer"""
