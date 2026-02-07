@@ -409,11 +409,11 @@ def main():
     # Main header
     st.markdown("""
     <div style='text-align: center; padding: 2rem 0;'>
-        <h1 style='font-size: 3rem; margin: 0;'>🤖 AI Spam Email Classifier</h1>
+        <h1 style='font-size: 3rem; margin: 0;'>🤖 AI Spam Email Classifier ( Demo Version )</h1>
         <p style='font-size: 1.3rem; color: #666; margin-top: 0.5rem;'>
             Advanced ML-Powered Email Security Analysis
         </p>
-        <p style='color: #999; font-size: 0.9rem;'>
+        <p style='color: rgb(255, 75, 75); font-size: 0.9rem;'>
             🎯 97% Accuracy | 🔍 Phishing Detection | 🧠 AI Explanations | ⚡ Real-time Analysis
         </p>
     </div>
@@ -499,7 +499,7 @@ Include both subject and body for best results.""",
         st.markdown("""
         <div class="metric-card">
             <h3 style='margin: 0; color: #FF4B4B;'>🎯</h3>
-            <h4>97% Accuracy</h4>
+            <h4 style='color: #FF4B4B;'>97% Accuracy</h4>
             <p style='font-size: 0.9rem; color: #666;'>Trained on thousands of real spam emails</p>
         </div>
         """, unsafe_allow_html=True)
@@ -508,7 +508,7 @@ Include both subject and body for best results.""",
         st.markdown("""
         <div class="metric-card">
             <h3 style='margin: 0; color: #FF4B4B;'>⚡</h3>
-            <h4>Real-time</h4>
+            <h4 style='color: #FF4B4B;'>Real-time</h4>
             <p style='font-size: 0.9rem; color: #666;'>Instant analysis in <100ms</p>
         </div>
         """, unsafe_allow_html=True)
@@ -517,7 +517,7 @@ Include both subject and body for best results.""",
         st.markdown("""
         <div class="metric-card">
             <h3 style='margin: 0; color: #FF4B4B;'>🔍</h3>
-            <h4>Phishing Detection</h4>
+            <h4 style='color: #FF4B4B;'>Phishing Detection</h4>
             <p style='font-size: 0.9rem; color: #666;'>Advanced URL & link analysis</p>
         </div>
         """, unsafe_allow_html=True)
@@ -526,7 +526,7 @@ Include both subject and body for best results.""",
         st.markdown("""
         <div class="metric-card">
             <h3 style='margin: 0; color: #FF4B4B;'>🔒</h3>
-            <h4>100% Private</h4>
+            <h4 style='color: #FF4B4B;'>100% Private</h4>
             <p style='font-size: 0.9rem; color: #666;'>No data stored or shared</p>
         </div>
         """, unsafe_allow_html=True)
@@ -535,7 +535,7 @@ Include both subject and body for best results.""",
     st.markdown("---")
     st.markdown("""
         <div style='text-align: center; padding: 2rem 0; background-color: #f8f9fa; border-radius: 10px;'>
-            <p style='font-size: 1.1rem; font-weight: bold; margin: 0;'>
+            <p style='color: #FF4B4B; font-size: 1.1rem; font-weight: bold; margin: 0;'>
                 Created by Saiyam Jain 💻
             </p>
             <p style='color: #666; margin-top: 0.5rem;'>
