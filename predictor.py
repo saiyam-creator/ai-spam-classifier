@@ -14,6 +14,15 @@ import config
 
 class SpamPredictor:
     """Wrapper for spam prediction using trained model"""
+
+    def get_model_and_vectorizer(self):
+        """
+        Get model and vectorizer for explainability
+        
+        Returns:
+            tuple: (model, vectorizer)
+        """
+        return self.model, self.vectorizer
     
     def __init__(self):
         """Initialize predictor and load model"""

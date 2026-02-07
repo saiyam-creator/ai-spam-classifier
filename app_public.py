@@ -1,20 +1,23 @@
 """
 Gmail Spam Classifier - PUBLIC DEPLOYMENT VERSION
-Manual text input only (no Gmail OAuth)
+Advanced spam detection with phishing analysis and AI explanations
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import re
 
-# Import predictor only
+# Import modules
 from predictor import SpamPredictor
+from phishing_detector import PhishingDetector
+from explainability import SpamExplainer
 
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Spam Email Classifier ( Demo version)",
+    page_title="AI Spam Email Classifier - Demo",
     page_icon="📧",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -35,9 +38,12 @@ st.markdown("""
         border-radius: 10px;
         border: none;
         font-size: 1.1rem;
+        transition: all 0.3s ease;
     }
     .stButton>button:hover {
         background-color: #FF6B6B;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 75, 75, 0.3);
     }
     .spam-box {
         padding: 1.5rem;
@@ -45,6 +51,7 @@ st.markdown("""
         background-color: #FFE5E5;
         border-left: 5px solid #FF4B4B;
         margin: 1rem 0;
+        animation: slideIn 0.3s ease;
     }
     .ham-box {
         padding: 1.5rem;
@@ -52,191 +59,513 @@ st.markdown("""
         background-color: #E5F5E5;
         border-left: 5px solid #4CAF50;
         margin: 1rem 0;
+        animation: slideIn 0.3s ease;
+    }
+    .phishing-box {
+        padding: 1rem;
+        border-radius: 10px;
+        background-color: #f0f2f6;
+        border: 2px solid #ddd;
+    }
+    .feature-card {
+        padding: 1.5rem;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-align: center;
+        margin: 0.5rem 0;
+    }
+    .metric-card {
+        padding: 1rem;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+        border-left: 4px solid #FF4B4B;
+    }
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    .highlight-word {
+        background-color: #FFE5E5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: bold;
+        color: #D32F2F;
+    }
+    .stExpander {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin: 0.5rem 0;
     }
     </style>
 """, unsafe_allow_html=True)
 
 
-# Initialize predictor
+# Initialize session state
 @st.cache_resource
 def load_predictor():
     """Load spam predictor (cached)"""
     return SpamPredictor()
 
 
-def main():
-    """Main application"""
+def init_session_state():
+    """Initialize all session state variables"""
+    if 'predictor' not in st.session_state:
+        st.session_state.predictor = load_predictor()
     
-    # Header
-    st.title("🤖 AI Spam Email Classifier ( Demo version )")
-    st.markdown("### Powered by Machine Learning - Naive Bayes Algorithm")
-    st.markdown("---")
+    if 'phishing_detector' not in st.session_state:
+        st.session_state.phishing_detector = PhishingDetector()
     
-    # Sidebar
+    if 'explainer' not in st.session_state:
+        if st.session_state.predictor.is_loaded():
+            model, vectorizer = st.session_state.predictor.get_model_and_vectorizer()
+            st.session_state.explainer = SpamExplainer(model, vectorizer)
+        else:
+            st.session_state.explainer = None
+    
+    if 'example_text' not in st.session_state:
+        st.session_state.example_text = ''
+    
+    if 'analysis_history' not in st.session_state:
+        st.session_state.analysis_history = []
+
+
+def render_sidebar():
+    """Render sidebar content"""
     with st.sidebar:
-        st.header("ℹ️ About")
-        st.markdown("""
-        This AI-powered spam classifier uses a **Naive Bayes** 
-        machine learning model trained on thousands of emails.
+        st.image("https://img.icons8.com/fluency/96/000000/spam.png", width=80)
+        st.title("About")
         
-        **Model Stats:**
+        st.markdown("""
+        ### 🤖 AI Spam Classifier
+        
+        Advanced email security powered by machine learning and phishing detection.
+        
+        **🎯 Model Performance:**
         - Algorithm: Multinomial Naive Bayes
         - Accuracy: ~97%
-        - Features: TF-IDF (3000 features)
-        - Training Set: SMS Spam Collection
+        - Features: 3000 TF-IDF vectors
+        - Dataset: SMS Spam Collection
         
-        **How It Works:**
-        1. Text preprocessing (stemming, stopwords)
-        2. TF-IDF vectorization
-        3. Probabilistic classification
-        4. Confidence score calculation
+        **🔍 Detection Methods:**
+        1. **Text Analysis** - ML pattern recognition
+        2. **Phishing Detection** - URL security scan
+        3. **AI Explainability** - Why it's spam
+        
+        **⚡ Processing Pipeline:**
+        - Text preprocessing (lowercase, stemming)
+        - Stopword removal
+        - TF-IDF vectorization
+        - Probabilistic classification
+        - Multi-factor risk scoring
         """)
         
         st.markdown("---")
         
-        st.header("📊 Example Messages")
+        st.header("📊 Quick Examples")
         
-        if st.button("📩 Load Spam Example"):
-            st.session_state.example_text = "URGENT! You have won a $5000 prize. Click here immediately to claim your reward before it expires. Limited time offer! Call 1-800-WINNER now!"
+        col1, col2 = st.columns(2)
         
-        if st.button("✉️ Load Legitimate Example"):
-            st.session_state.example_text = "Hey Sarah, just confirming our meeting tomorrow at 3 PM at the coffee shop downtown. Let me know if you need to reschedule. Looking forward to catching up!"
+        with col1:
+            if st.button("🚫 Spam", use_container_width=True):
+                st.session_state.example_text = """URGENT WINNER NOTIFICATION!
+                
+Congratulations! You've been selected to receive a $5,000 cash prize and a FREE iPhone 15 Pro Max!
+
+To claim your reward, click here immediately: http://bit.ly/claim-prize-now
+
+This offer expires in 24 hours! Act now before it's too late!
+
+Call our hotline: 1-800-FAKE-NUM
+Reference Code: WIN5000XYZ
+
+Don't miss this once-in-a-lifetime opportunity!"""
+                st.rerun()
+        
+        with col2:
+            if st.button("✅ Legit", use_container_width=True):
+                st.session_state.example_text = """Hi Sarah,
+
+Just wanted to confirm our meeting tomorrow at 3 PM at the downtown Starbucks. I'll bring the project documents we discussed.
+
+Let me know if you need to reschedule or if there's anything specific you'd like me to prepare.
+
+Looking forward to catching up!
+
+Best regards,
+Mike"""
+                st.rerun()
         
         st.markdown("---")
-        st.markdown("**Technologies:**")
+        
+        # Statistics
+        if len(st.session_state.analysis_history) > 0:
+            st.header("📈 Your Stats")
+            total = len(st.session_state.analysis_history)
+            spam_count = sum(1 for x in st.session_state.analysis_history if x['prediction'] == 'spam')
+            
+            st.metric("Total Analyzed", total)
+            st.metric("Spam Detected", spam_count)
+            st.metric("Spam Rate", f"{(spam_count/total*100):.1f}%")
+        
+        st.markdown("---")
+        st.markdown("**🛠️ Technologies:**")
         st.markdown("- Python 🐍")
         st.markdown("- Streamlit 🎈")
         st.markdown("- Scikit-learn 🤖")
         st.markdown("- NLTK 📝")
+        st.markdown("- TF-IDF Vectorization")
+
+
+def display_classification_result(email_text, prediction, confidence, phishing_result, explanation):
+    """Display comprehensive classification results"""
     
-    # Load predictor
-    try:
-        predictor = load_predictor()
+    st.markdown("---")
+    st.markdown("## 📊 Analysis Results")
+    
+    # Main results in two columns
+    col_spam, col_phishing = st.columns(2)
+    
+    with col_spam:
+        if prediction == 'spam':
+            st.markdown(f"""
+            <div class="spam-box">
+                <h2 style='margin: 0; color: #D32F2F;'>🚫 SPAM DETECTED</h2>
+                <p style='font-size: 1.3rem; margin-top: 0.5rem; font-weight: bold;'>
+                    Confidence: {confidence:.2f}%
+                </p>
+                <p style='margin-top: 1rem; color: #555;'>
+                    ⚠️ This email appears to be spam. Exercise caution and avoid clicking any links.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="ham-box">
+                <h2 style='margin: 0; color: #388E3C;'>✅ LEGITIMATE EMAIL</h2>
+                <p style='font-size: 1.3rem; margin-top: 0.5rem; font-weight: bold;'>
+                    Confidence: {confidence:.2f}%
+                </p>
+                <p style='margin-top: 1rem; color: #555;'>
+                    ✓ This email appears to be legitimate communication.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        if not predictor.is_loaded():
-            st.error("⚠️ Model not loaded. Please ensure model files exist.")
-            st.stop()
-    except Exception as e:
-        st.error(f"⚠️ Error loading model: {str(e)}")
+        # Confidence meter
+        st.markdown("#### 📈 Confidence Level")
+        st.progress(confidence / 100)
+        
+        if confidence >= 90:
+            st.success("Very High Confidence")
+        elif confidence >= 70:
+            st.info("High Confidence")
+        elif confidence >= 50:
+            st.warning("Moderate Confidence")
+        else:
+            st.error("Low Confidence - Manual Review Recommended")
+    
+    with col_phishing:
+        risk_color = {'Low': '#4CAF50', 'Medium': '#FF9800', 'High': '#D32F2F'}
+        risk_bg = {'Low': '#E8F5E9', 'Medium': '#FFF3E0', 'High': '#FFEBEE'}
+        
+        st.markdown(f"""
+        <div style='padding: 1.5rem; border-radius: 10px; background-color: {risk_bg[phishing_result["risk_level"]]}; border: 2px solid {risk_color[phishing_result["risk_level"]]}'>
+            <h2 style='margin: 0;'>🔗 Phishing Risk Analysis</h2>
+            <p style='font-size: 1.3rem; margin-top: 0.5rem; font-weight: bold;'>
+                Risk Score: {phishing_result['phishing_score']:.1f}/100
+            </p>
+            <p style='color: {risk_color[phishing_result['risk_level']]}; font-size: 1.2rem; font-weight: bold; margin-top: 0.5rem;'>
+                ⚠️ {phishing_result['risk_level']} Risk Level
+            </p>
+            <p style='margin-top: 1rem; color: #555;'>
+                {phishing_result['explanation']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"**URLs Found:** {phishing_result['url_count']}")
+        if phishing_result['suspicious_urls']:
+            st.markdown(f"**Suspicious URLs:** {len(phishing_result['suspicious_urls'])}")
+    
+    # AI Explanation Section
+    if explanation:
+        st.markdown("---")
+        st.markdown("## 🧠 AI Explanation: Why This Classification?")
+        
+        st.info(f"**{explanation['explanation']}**")
+        
+        # Show suspicious words with highlighting
+        if explanation['suspicious_words']:
+            st.markdown("### 🔍 Key Spam Indicators")
+            
+            # Display highlighted words
+            highlighted_words = ' '.join([
+                f'<span class="highlight-word">{word}</span>' 
+                for word in explanation['suspicious_words']
+            ])
+            st.markdown(f"**Detected Keywords:** {highlighted_words}", unsafe_allow_html=True)
+        
+        # Detailed feature analysis
+        with st.expander("📊 Detailed Feature Analysis", expanded=False):
+            st.markdown("**Top Contributing Features:**")
+            
+            if explanation['top_features']:
+                # Create DataFrame for better visualization
+                features_df = pd.DataFrame(explanation['top_features'][:10])
+                features_df['contribution'] = features_df['contribution'].round(6)
+                features_df['tfidf_score'] = features_df['tfidf_score'].round(6)
+                
+                st.dataframe(
+                    features_df,
+                    column_config={
+                        "word": "Word/Feature",
+                        "contribution": st.column_config.NumberColumn(
+                            "Contribution Score",
+                            format="%.6f"
+                        ),
+                        "tfidf_score": st.column_config.NumberColumn(
+                            "TF-IDF Score",
+                            format="%.6f"
+                        ),
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+            
+            st.markdown(f"**Confidence Reasoning:** {explanation['confidence_reasoning']}")
+    
+    # Phishing Details
+    if phishing_result['phishing_score'] > 0:
+        with st.expander("⚠️ Phishing Analysis Details", expanded=phishing_result['risk_level'] == 'High'):
+            
+            if phishing_result['indicators']:
+                st.markdown("**🚨 Security Risk Indicators:**")
+                for i, indicator in enumerate(phishing_result['indicators'], 1):
+                    st.markdown(f"{i}. {indicator}")
+            
+            if phishing_result['suspicious_urls']:
+                st.markdown("---")
+                st.markdown("**🔗 Suspicious URLs Detected:**")
+                
+                for idx, url_data in enumerate(phishing_result['suspicious_urls'], 1):
+                    st.markdown(f"**URL #{idx}:**")
+                    st.code(url_data['url'], language=None)
+                    
+                    st.markdown("**Why it's suspicious:**")
+                    for reason in url_data['reasons']:
+                        st.markdown(f"- ⚠️ {reason}")
+                    
+                    st.markdown("---")
+    
+    # Technical Details
+    with st.expander("🔬 Technical Analysis", expanded=False):
+        col_tech1, col_tech2 = st.columns(2)
+        
+        with col_tech1:
+            st.markdown("**Text Statistics:**")
+            st.write(f"- Characters: {len(email_text)}")
+            st.write(f"- Words: {len(email_text.split())}")
+            st.write(f"- Lines: {len(email_text.splitlines())}")
+            
+            # Count URLs
+            url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+            urls = url_pattern.findall(email_text)
+            st.write(f"- URLs: {len(urls)}")
+        
+        with col_tech2:
+            st.markdown("**Classification Details:**")
+            st.write(f"- Prediction: **{prediction.upper()}**")
+            st.write(f"- ML Confidence: **{confidence:.4f}%**")
+            st.write(f"- Phishing Score: **{phishing_result['phishing_score']:.2f}/100**")
+            st.write(f"- Risk Level: **{phishing_result['risk_level']}**")
+        
+        st.markdown("**Preprocessed Text Preview:**")
+        preprocessed = st.session_state.predictor.preprocess_text(email_text)
+        preview_length = min(300, len(preprocessed))
+        st.code(preprocessed[:preview_length] + ("..." if len(preprocessed) > preview_length else ""), language=None)
+
+
+def main():
+    """Main application"""
+    
+    # Initialize session state
+    init_session_state()
+    
+    # Check if predictor loaded
+    if not st.session_state.predictor.is_loaded():
+        st.error("⚠️ Model failed to load. Please refresh the page or contact support.")
         st.stop()
     
-    # Main content
-    st.subheader("📝 Enter Email Text")
+    # Render sidebar
+    render_sidebar()
     
-    default_text = st.session_state.get('example_text', '')
+    # Main header
+    st.markdown("""
+    <div style='text-align: center; padding: 2rem 0;'>
+        <h1 style='font-size: 3rem; margin: 0;'>🤖 AI Spam Email Classifier</h1>
+        <p style='font-size: 1.3rem; color: #666; margin-top: 0.5rem;'>
+            Advanced ML-Powered Email Security Analysis
+        </p>
+        <p style='color: #999; font-size: 0.9rem;'>
+            🎯 97% Accuracy | 🔍 Phishing Detection | 🧠 AI Explanations | ⚡ Real-time Analysis
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Main input section
+    st.markdown("## 📝 Enter Email Content")
+    
     email_text = st.text_area(
         "Paste your email content here:",
-        value=default_text,
-        height=250,
-        placeholder="Type or paste email message here...\n\nExample:\n'Congratulations! You have won a free iPhone. Click here to claim now!'",
-        help="Enter the full email text including subject and body"
+        value=st.session_state.example_text,
+        height=300,
+        placeholder="""Type or paste the complete email here...
+
+Example:
+Subject: Urgent Account Verification Required
+From: security@paypa1-verify.com
+
+Dear Customer,
+
+Your account has been temporarily suspended due to unusual activity...
+        
+Include both subject and body for best results.""",
+        help="Enter the full email text including subject and body for comprehensive analysis"
     )
     
-    # Buttons
-    col_clear, col_classify = st.columns([1, 2])
+    # Action buttons
+    col_clear, col_classify = st.columns([1, 3])
     
     with col_clear:
-        if st.button("🗑️ Clear"):
+        if st.button("🗑️ Clear", use_container_width=True):
             st.session_state.example_text = ''
             st.rerun()
     
     with col_classify:
-        classify_button = st.button("🔍 Classify Email")
+        classify_button = st.button("🔍 Analyze Email", use_container_width=True, type="primary")
     
     # Process classification
     if classify_button:
         if not email_text.strip():
-            st.warning("⚠️ Please enter some text to classify!")
+            st.warning("⚠️ Please enter some text to analyze!")
         else:
-            with st.spinner("🤖 Analyzing email..."):
-                prediction, confidence = predictor.predict(email_text)
+            with st.spinner("🤖 Running comprehensive analysis..."):
+                # Spam prediction
+                prediction, confidence = st.session_state.predictor.predict(email_text)
                 
-                st.markdown("---")
-                st.subheader("📊 Classification Result")
+                # Phishing detection
+                phishing_result = st.session_state.phishing_detector.analyze_email(email_text)
                 
-                # Display result
-                if prediction == 'spam':
-                    st.markdown(f"""
-                    <div class="spam-box">
-                        <h2 style='color: #D32F2F; margin: 0;'>🚫 SPAM DETECTED</h2>
-                        <p style='font-size: 1.2rem; margin-top: 0.5rem;'>
-                            Confidence: <b>{confidence:.2f}%</b>
-                        </p>
-                        <p style='margin-top: 1rem;'>
-                            ⚠️ This email appears to be spam. Be cautious and avoid clicking any links.
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class="ham-box">
-                        <h2 style='color: #388E3C; margin: 0;'>✅ LEGITIMATE EMAIL</h2>
-                        <p style='font-size: 1.2rem; margin-top: 0.5rem;'>
-                            Confidence: <b>{confidence:.2f}%</b>
-                        </p>
-                        <p style='margin-top: 1rem;'>
-                            ✓ This email appears to be legitimate (not spam).
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                # Get explanation
+                explanation = None
+                if st.session_state.explainer:
+                    explanation = st.session_state.explainer.explain_prediction(
+                        email_text, prediction, confidence
+                    )
                 
-                # Confidence meter
-                st.subheader("📈 Confidence Score")
-                st.progress(confidence / 100)
+                # Store in history
+                st.session_state.analysis_history.append({
+                    'timestamp': datetime.now(),
+                    'prediction': prediction,
+                    'confidence': confidence,
+                    'phishing_score': phishing_result['phishing_score']
+                })
                 
-                # Detailed analysis
-                with st.expander("🔬 Technical Details"):
-                    st.write(f"**Input Length:** {len(email_text)} characters")
-                    st.write(f"**Word Count:** {len(email_text.split())} words")
-                    st.write(f"**Classification:** {prediction.upper()}")
-                    st.write(f"**Confidence:** {confidence:.4f}%")
-                    
-                    preprocessed = predictor.preprocess_text(email_text)
-                    st.write(f"**Preprocessed Text (first 200 chars):**")
-                    st.code(preprocessed[:200] + "..." if len(preprocessed) > 200 else preprocessed)
+                # Display results
+                display_classification_result(
+                    email_text, 
+                    prediction, 
+                    confidence, 
+                    phishing_result, 
+                    explanation
+                )
     
-    # Features section
+    # Features showcase
     st.markdown("---")
-    st.subheader("✨ Key Features")
+    st.markdown("## ✨ Platform Features")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.markdown("""
-        **🎯 High Accuracy**
-        - 97%+ on test data
-        - Trained on real spam
-        - TF-IDF features
-        """)
+        <div class="metric-card">
+            <h3 style='margin: 0; color: #FF4B4B;'>🎯</h3>
+            <h4>97% Accuracy</h4>
+            <p style='font-size: 0.9rem; color: #666;'>Trained on thousands of real spam emails</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
         st.markdown("""
-        **⚡ Fast Processing**
-        - Real-time prediction
-        - <100ms response
-        - Efficient algorithm
-        """)
+        <div class="metric-card">
+            <h3 style='margin: 0; color: #FF4B4B;'>⚡</h3>
+            <h4>Real-time</h4>
+            <p style='font-size: 0.9rem; color: #666;'>Instant analysis in <100ms</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
         st.markdown("""
-        **🔒 Privacy First**
-        - No data stored
-        - Local processing
-        - Fully anonymous
-        """)
+        <div class="metric-card">
+            <h3 style='margin: 0; color: #FF4B4B;'>🔍</h3>
+            <h4>Phishing Detection</h4>
+            <p style='font-size: 0.9rem; color: #666;'>Advanced URL & link analysis</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown("""
+        <div class="metric-card">
+            <h3 style='margin: 0; color: #FF4B4B;'>🔒</h3>
+            <h4>100% Private</h4>
+            <p style='font-size: 0.9rem; color: #666;'>No data stored or shared</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Footer
     st.markdown("---")
     st.markdown("""
-        <div style='text-align: center; color: #666; padding: 1rem;'>
-            Made by Saiyam Jain
-            <a href='https://github.com' target='_blank'>GitHub</a> | 
-            <a href='https://streamlit.io' target='_blank'>Streamlit</a>
-        </div>
-                <div style='text-align: center; color: #666; padding: 1rem;'>
-            contact me for full version with Gmail integration!
-                email: deepakriyajain@gmail.com
-           
+        <div style='text-align: center; padding: 2rem 0; background-color: #f8f9fa; border-radius: 10px;'>
+            <p style='font-size: 1.1rem; font-weight: bold; margin: 0;'>
+                Created by Saiyam Jain 💻
+            </p>
+            <p style='color: #666; margin-top: 0.5rem;'>
+                ML Engineer | AI Developer | Cybersecurity Enthusiast
+            </p>
+            <p style='margin-top: 1rem;'>
+                <a href='https://github.com' target='_blank' style='margin: 0 0.5rem; text-decoration: none;'>
+                    🔗 GitHub
+                </a>
+                |
+                <a href='mailto:deepakriyajain@gmail.com' style='margin: 0 0.5rem; text-decoration: none;'>
+                    📧 Email
+                </a>
+                |
+                <a href='https://streamlit.io' target='_blank' style='margin: 0 0.5rem; text-decoration: none;'>
+                    🎈 Powered by Streamlit
+                </a>
+            </p>
+            <div style='margin-top: 2rem; padding: 1rem; background-color: #fff; border-radius: 8px; border: 2px solid #FF4B4B;'>
+                <p style='color: #FF4B4B; font-weight: bold; margin: 0;'>
+                    💼 Want the Full Version with Gmail Integration?
+                </p>
+                <p style='color: #666; margin-top: 0.5rem;'>
+                    Contact me for the professional version with real-time Gmail scanning,
+                    automatic monitoring, and desktop notifications!
+                </p>
+                <p style='margin-top: 0.5rem;'>
+                    📧 <a href='mailto:deepakriyajain@gmail.com'>deepakriyajain@gmail.com</a>
+                </p>
+            </div>
         </div>
     """, unsafe_allow_html=True)
 
