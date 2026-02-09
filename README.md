@@ -50,6 +50,10 @@ This project demonstrates a **complete ML product lifecycle**:
 > It is available for **local/self-hosted execution**.
 
 ---
+## 📸 App Preview
+<img width="1919" height="998" alt="Screenshot 2026-02-09 082659" src="https://github.com/user-attachments/assets/69b851ea-0a96-49b5-9602-1a389d1d7f88" />
+
+---
 
 ## 🛠️ Tech Stack
 
